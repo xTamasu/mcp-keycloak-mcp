@@ -17,7 +17,7 @@ services:
       KC_HOSTNAME_STRICT_HTTPS: "false"
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
-      KC_HOSTNAME: localhost
+      KC_HOSTNAME: host.docker.internal
     volumes:
       - ./keycloak:/opt/keycloak/data/import
     ports:
@@ -38,7 +38,7 @@ services:
     container_name: mcp-server
     environment:
       PORT: 3000
-      KEYCLOAK_ISSUER: http://localhost:8080/realms/mcp-poc
+      KEYCLOAK_ISSUER: http://host.docker.internal:8080/realms/mcp-poc
       KEYCLOAK_JWKS_URI: http://keycloak:8080/realms/mcp-poc/protocol/openid-connect/certs
       MCP_SERVER_URL: http://localhost:3000
       MCP_AUDIENCE: mcp-server
@@ -64,7 +64,7 @@ services:
       ENABLE_OAUTH_SIGNUP: "true"
       OAUTH_CLIENT_ID: openwebui-client
       OAUTH_CLIENT_SECRET: ${OPENWEBUI_OAUTH_CLIENT_SECRET:-openwebui-secret}
-      OPENID_PROVIDER_URL: http://keycloak:8080/realms/mcp-poc/.well-known/openid-configuration
+      OPENID_PROVIDER_URL: http://host.docker.internal:8080/realms/mcp-poc/.well-known/openid-configuration
       OAUTH_PROVIDER_NAME: Keycloak
       ENABLE_LOGIN_FORM: "true"
     ports:

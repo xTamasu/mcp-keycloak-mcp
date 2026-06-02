@@ -39,11 +39,11 @@ docker compose up --build
 
 Services start in order: Keycloak (health-checked) → MCP Server + Open WebUI.
 
-| Service    | URL                          | Credentials           |
-|------------|------------------------------|-----------------------|
-| Keycloak   | http://localhost:8080        | admin / adminpassword |
-| MCP Server | http://localhost:3000        | —                     |
-| Open WebUI | http://localhost:3001        | see below             |
+| Service    | URL                                  | Credentials           |
+|------------|--------------------------------------|-----------------------|
+| Keycloak   | http://host.docker.internal:8080     | admin / adminpassword |
+| MCP Server | http://localhost:3000                | —                     |
+| Open WebUI | http://localhost:3001                | see below             |
 
 **Test user**: `testuser` / `testpassword`
 
@@ -96,7 +96,7 @@ Configure once in the Admin panel so all users share the same OAuth client crede
 3. Click **Add Connection** and fill in:
    - **URL**: `http://mcp-server:3000/mcp`
    - **Auth Type**: `OAuth 2.1 (Static)`
-   - **OAuth Server URL**: `http://keycloak:8080/realms/mcp-poc`
+   - **OAuth Server URL**: `http://host.docker.internal:8080/realms/mcp-poc`
    - **Client ID**: `openwebui-client`
    - **Client Secret**: `openwebui-secret`
    - **Scope**: `openid profile email`
@@ -109,7 +109,7 @@ Use this as a workaround for Open WebUI's known per-user PKCE bugs (see Known Li
 ```bash
 # Get a token directly from Keycloak using the test user
 TOKEN=$(curl -s -X POST \
-  http://localhost:8080/realms/mcp-poc/protocol/openid-connect/token \
+  http://host.docker.internal:8080/realms/mcp-poc/protocol/openid-connect/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "client_id=opencode-client&grant_type=password&username=testuser&password=testpassword&scope=openid" \
   | jq -r .access_token)
@@ -143,6 +143,7 @@ In Open WebUI, paste the token as a **Bearer token** in the connection settings 
 - **Open WebUI per-user OAuth (PKCE bug)**: As of early 2026, Open WebUI has active issues with per-user OAuth flows involving PKCE (`code_challenge`/`code_verifier` mismatch across redirects). Use the **Static OAuth** admin configuration (Option 1) or the **Bearer Token fallback** (Option 2) instead.
 - **`sslRequired: none`**: This realm export disables SSL requirements for local development. Never use this in production.
 - **Hardcoded secrets in realm-export.json**: The client secrets in `realm-export.json` are defaults for local PoC use. Rotate them via Keycloak Admin → Clients → Credentials before any shared deployment.
+- **`host.docker.internal` requirement**: `KC_HOSTNAME` is set to `host.docker.internal` so that Keycloak's token and authorization URLs are reachable both from the host browser and from other containers (Open WebUI's server-side token exchange). This is provided automatically by Docker Desktop on Mac/Windows. On Linux Docker Engine, add `extra_hosts: ["host.docker.internal:host-gateway"]` to each service in `docker-compose.yml`.
 - **MCP_SERVER_URL = localhost**: The `MCP_SERVER_URL` env var defaults to `http://localhost:3000` (the host-facing URL). Inside the Docker network, services talk to `http://mcp-server:3000`. Adjust if deploying remotely.
 
 ## Environment Variables
