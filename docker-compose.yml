@@ -41,6 +41,7 @@ services:
       KEYCLOAK_ISSUER: http://keycloak:8080/realms/mcp-poc
       KEYCLOAK_JWKS_URI: http://keycloak:8080/realms/mcp-poc/protocol/openid-connect/certs
       MCP_SERVER_URL: http://localhost:3000
+      MCP_SERVER_INTERNAL_URL: http://mcp-server:3000
       MCP_AUDIENCE: mcp-server
     ports:
       - "3000:3000"

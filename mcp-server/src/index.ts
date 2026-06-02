@@ -12,10 +12,11 @@ declare module 'express-serve-static-core' {
 }
 
 const KEYCLOAK_ISSUER = process.env.KEYCLOAK_ISSUER ?? 'http://localhost:8080/realms/mcp-poc';
-// KEYCLOAK_JWKS_URI can point to the internal Docker hostname for in-network fetching
-// while KEYCLOAK_ISSUER uses the external hostname for token validation and resource metadata.
+// KEYCLOAK_JWKS_URI uses the internal Docker hostname; KEYCLOAK_ISSUER is the public-facing issuer.
 const KEYCLOAK_JWKS_URI = process.env.KEYCLOAK_JWKS_URI ?? `${KEYCLOAK_ISSUER}/protocol/openid-connect/certs`;
 const MCP_SERVER_URL = process.env.MCP_SERVER_URL ?? 'http://localhost:3000';
+// MCP_SERVER_INTERNAL_URL is used in AS metadata so Open WebUI (inside Docker) resolves /register.
+const MCP_SERVER_INTERNAL_URL = process.env.MCP_SERVER_INTERNAL_URL ?? MCP_SERVER_URL;
 const MCP_AUDIENCE = process.env.MCP_AUDIENCE ?? 'mcp-server';
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
 
@@ -24,7 +25,8 @@ const JWKS = createRemoteJWKSet(new URL(KEYCLOAK_JWKS_URI));
 const app = express();
 app.use(express.json());
 
-const KEYCLOAK_REGISTRATION_ENDPOINT = `${KEYCLOAK_JWKS_URI.replace('/protocol/openid-connect/certs', '')}/clients-registrations/openid-connect`;
+const KEYCLOAK_BASE = KEYCLOAK_JWKS_URI.replace('/protocol/openid-connect/certs', '');
+const KEYCLOAK_REGISTRATION_ENDPOINT = `${KEYCLOAK_BASE}/clients-registrations/openid-connect`;
 
 app.get('/.well-known/oauth-protected-resource', (_req: Request, res: Response) => {
   res.json({
@@ -32,6 +34,20 @@ app.get('/.well-known/oauth-protected-resource', (_req: Request, res: Response) 
     authorization_servers: [KEYCLOAK_ISSUER],
     bearer_methods_supported: ['header'],
   });
+});
+
+// Proxy Keycloak's RFC 8414 AS metadata, overriding registration_endpoint to our
+// /register proxy so Open WebUI (inside Docker) can reach it as mcp-server:3000/register.
+app.get('/.well-known/oauth-authorization-server', async (_req: Request, res: Response) => {
+  try {
+    const upstream = await fetch(`${KEYCLOAK_BASE}/.well-known/oauth-authorization-server`);
+    const data = await upstream.json() as Record<string, unknown>;
+    data['registration_endpoint'] = `${MCP_SERVER_INTERNAL_URL}/register`;
+    res.json(data);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(502).json({ error: 'proxy_error', error_description: msg });
+  }
 });
 
 // Open WebUI derives the DCR endpoint as {mcp_server_base}/register rather than
