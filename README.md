@@ -96,39 +96,16 @@ OpenCode handles the OAuth flow automatically when it encounters a 401. Add this
 
 ## Open WebUI Configuration
 
-### Empfohlener Weg — Auth-Typ „OAuth"
+Set the MCP auth type to **OAuth** — Open WebUI will then automatically forward the logged-in user's Keycloak token to the MCP server.
 
-Open WebUI leitet den **OAuth-Token des angemeldeten Systembenutzers** direkt an den MCP-Server weiter. Es ist keine separate Client-Credentials-Konfiguration nötig.
-
-1. In Open WebUI als Admin einloggen (http://localhost:3001)
-2. **Admin Settings → External Connections → MCP**
-3. **Add Connection** und folgendes eintragen:
+1. Log in to Open WebUI at http://localhost:3001
+2. Go to **Admin Settings → External Connections → MCP**
+3. Click **Add Connection** and fill in:
    - **URL**: `http://mcp-server:3000/mcp`
    - **Auth Type**: `OAuth`
-4. **Save** — Open WebUI hängt beim MCP-Aufruf automatisch den Keycloak-Token des eingeloggten Benutzers als `Authorization: Bearer <token>` an.
+4. Click **Save**
 
-> **Voraussetzung:** Open WebUI muss selbst per Keycloak-OIDC eingeloggt sein (d. h. `OPENID_PROVIDER_URL` im Docker Compose ist gesetzt). Dann ist der Benutzer-Token bereits vorhanden und wird direkt weitergereicht — kein zusätzlicher OAuth-Flow nötig.
-
-### Fallback — Bearer Token manuell
-
-Falls der OAuth-Weiterleitungsweg nicht funktioniert:
-
-```bash
-# Token direkt von Keycloak holen
-TOKEN=$(curl -s -X POST \
-  http://keycloak:8080/realms/mcp-poc/protocol/openid-connect/token \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "client_id=opencode-client&grant_type=password&username=testuser&password=testpassword&scope=openid" \
-  | jq -r .access_token)
-
-# Token direkt gegen den MCP-Server testen
-curl -X POST http://localhost:3000/mcp \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
-```
-
-Den Token in Open WebUI als **Bearer token** in den Connection-Einstellungen eintragen.
+> **Prerequisite:** Open WebUI must itself be logged in via Keycloak OIDC (i.e. `OPENID_PROVIDER_URL` is set in Docker Compose). The user's token is then already present and forwarded directly — no additional OAuth flow needed.
 
 ## Available MCP Tools
 
@@ -147,7 +124,7 @@ Den Token in Open WebUI als **Bearer token** in den Connection-Einstellungen ein
 
 ## Known Limitations
 
-- **Open WebUI Auth-Typ „OAuth"**: Setzt voraus, dass Open WebUI selbst per Keycloak-OIDC angebunden ist. Der Token des eingeloggten Benutzers wird dann direkt weitergeleitet. Falls Open WebUI nicht per OIDC betrieben wird, den Bearer-Token-Fallback nutzen.
+- **Open WebUI auth type "OAuth"**: Requires Open WebUI to be connected via Keycloak OIDC. If Open WebUI is not running with OIDC, the MCP connection will have no token to forward.
 - **`sslRequired: none`**: This realm export disables SSL requirements for local development. Never use this in production.
 - **Hardcoded secrets in realm-export.json**: The client secrets in `realm-export.json` are defaults for local PoC use. Rotate them via Keycloak Admin → Clients → Credentials before any shared deployment.
 - **`/etc/hosts` entry required**: `KC_HOSTNAME` is set to `keycloak` (the Docker-internal service name). Inside containers, Docker DNS resolves `keycloak` to the Keycloak container. On the host, `127.0.0.1 keycloak` in `/etc/hosts` makes the same hostname reach port-mapped Keycloak. This is the simplest way to share one URL between browser and containers without platform-specific helpers like `host.docker.internal`.
