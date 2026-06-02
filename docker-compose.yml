@@ -1,0 +1,78 @@
+version: '3.9'
+
+networks:
+  mcp-net:
+    driver: bridge
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    container_name: keycloak
+    command: start-dev --import-realm
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-adminpassword}
+      KC_HTTP_PORT: 8080
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HTTP_ENABLED: "true"
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import
+    ports:
+      - "8080:8080"
+    networks:
+      - mcp-net
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+
+  mcp-server:
+    build:
+      context: ./mcp-server
+      dockerfile: Dockerfile
+    container_name: mcp-server
+    environment:
+      PORT: 3000
+      KEYCLOAK_ISSUER: http://keycloak:8080/realms/mcp-poc
+      MCP_SERVER_URL: http://localhost:3000
+      MCP_AUDIENCE: mcp-server
+    ports:
+      - "3000:3000"
+    networks:
+      - mcp-net
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/.well-known/oauth-protected-resource || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:latest
+    container_name: open-webui
+    environment:
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:-changeme-super-secret-key-32chars}
+      ENABLE_OAUTH_SIGNUP: "true"
+      OAUTH_CLIENT_ID: openwebui-client
+      OAUTH_CLIENT_SECRET: ${OPENWEBUI_OAUTH_CLIENT_SECRET:-openwebui-secret}
+      OPENID_PROVIDER_URL: http://keycloak:8080/realms/mcp-poc/.well-known/openid-configuration
+      OAUTH_PROVIDER_NAME: Keycloak
+      ENABLE_LOGIN_FORM: "true"
+    ports:
+      - "3001:8080"
+    networks:
+      - mcp-net
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    volumes:
+      - open-webui-data:/app/backend/data
+
+volumes:
+  open-webui-data:
