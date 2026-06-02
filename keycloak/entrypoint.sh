@@ -60,9 +60,8 @@ if ! /opt/keycloak/bin/kcadm.sh get client-scopes -r mcp-poc \
     -s 'config."included.client.audience"=mcp-server' \
     -s 'config."id.token.claim"=false' \
     -s 'config."access.token.claim"=true'
-  /opt/keycloak/bin/kcadm.sh update realms/mcp-poc \
-    -s 'defaultDefaultClientScopes=["mcp-audience","web-origins","acr","profile","roles","email","basic"]'
-  echo "Created mcp-audience default client scope (${SCOPE_ID})."
+  /opt/keycloak/bin/kcadm.sh update "default-default-client-scopes/${SCOPE_ID}" -r mcp-poc
+  echo "Created mcp-audience default client scope (${SCOPE_ID}) and added to realm defaults."
 else
   echo "mcp-audience default client scope already present."
 fi
