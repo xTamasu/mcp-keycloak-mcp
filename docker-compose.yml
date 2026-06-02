@@ -8,7 +8,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:25.0
     container_name: keycloak
-    command: start-dev --import-realm
+    entrypoint: ["/bin/bash", "/opt/keycloak/data/import/entrypoint.sh"]
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-adminpassword}
