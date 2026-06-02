@@ -43,6 +43,32 @@ while IFS= read -r LINE; do
 done < <(/opt/keycloak/bin/kcadm.sh get "components" -r mcp-poc \
   --fields id,providerId,subType 2>/dev/null)
 
+# 3. Create a default client scope that injects mcp-server into the token audience.
+#    This ensures dynamically registered clients (e.g. OpenCode's self-registered
+#    client) also pass the MCP server's audience check — not just the pre-imported ones.
+if ! /opt/keycloak/bin/kcadm.sh get client-scopes -r mcp-poc \
+    --fields name 2>/dev/null | grep -q '"mcp-audience"'; then
+  SCOPE_ID=$(/opt/keycloak/bin/kcadm.sh create client-scopes -r mcp-poc \
+    -s name=mcp-audience \
+    -s protocol=openid-connect \
+    -s 'attributes.display.on.consent.screen=false' \
+    -s 'attributes.include.in.token.scope=false' \
+    -i 2>/dev/null)
+  /opt/keycloak/bin/kcadm.sh create "client-scopes/${SCOPE_ID}/protocol-mappers/models" \
+    -r mcp-poc \
+    -s name=mcp-server-audience \
+    -s protocol=openid-connect \
+    -s protocolMapper=oidc-audience-mapper \
+    -s 'config."included.client.audience"=mcp-server' \
+    -s 'config."id.token.claim"=false' \
+    -s 'config."access.token.claim"=true'
+  /opt/keycloak/bin/kcadm.sh update realms/mcp-poc \
+    -s 'defaultDefaultClientScopes=["mcp-audience","web-origins","acr","profile","roles","email","basic"]'
+  echo "Created mcp-audience default client scope (${SCOPE_ID})."
+else
+  echo "mcp-audience default client scope already present."
+fi
+
 echo "Post-import configuration complete."
 
 wait $KC_PID
