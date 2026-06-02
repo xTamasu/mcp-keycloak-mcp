@@ -51,9 +51,7 @@ if ! /opt/keycloak/bin/kcadm.sh get client-scopes -r mcp-poc \
   SCOPE_ID=$(/opt/keycloak/bin/kcadm.sh create client-scopes -r mcp-poc \
     -s name=mcp-audience \
     -s protocol=openid-connect \
-    -s 'attributes.display.on.consent.screen=false' \
-    -s 'attributes.include.in.token.scope=false' \
-    -i 2>/dev/null)
+    -i)
   /opt/keycloak/bin/kcadm.sh create "client-scopes/${SCOPE_ID}/protocol-mappers/models" \
     -r mcp-poc \
     -s name=mcp-server-audience \
