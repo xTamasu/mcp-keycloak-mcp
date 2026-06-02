@@ -1,9 +1,15 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { createRemoteJWKSet, jwtVerify, JWTPayload } from 'jose';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
+
+declare module 'express-serve-static-core' {
+  interface Request {
+    jwtPayload?: JWTPayload;
+  }
+}
 
 const KEYCLOAK_ISSUER = process.env.KEYCLOAK_ISSUER ?? 'http://localhost:8080/realms/mcp-poc';
 // KEYCLOAK_JWKS_URI can point to the internal Docker hostname for in-network fetching
@@ -18,12 +24,32 @@ const JWKS = createRemoteJWKSet(new URL(KEYCLOAK_JWKS_URI));
 const app = express();
 app.use(express.json());
 
+const KEYCLOAK_REGISTRATION_ENDPOINT = `${KEYCLOAK_JWKS_URI.replace('/protocol/openid-connect/certs', '')}/clients-registrations/openid-connect`;
+
 app.get('/.well-known/oauth-protected-resource', (_req: Request, res: Response) => {
   res.json({
     resource: MCP_SERVER_URL,
     authorization_servers: [KEYCLOAK_ISSUER],
     bearer_methods_supported: ['header'],
   });
+});
+
+// Open WebUI derives the DCR endpoint as {mcp_server_base}/register rather than
+// following resource_metadata → authorization_server → registration_endpoint.
+// This proxy forwards those requests to Keycloak's actual registration endpoint.
+app.post('/register', async (req: Request, res: Response) => {
+  try {
+    const upstream = await fetch(KEYCLOAK_REGISTRATION_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body),
+    });
+    const data = await upstream.json();
+    res.status(upstream.status).json(data);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(502).json({ error: 'registration_proxy_error', error_description: msg });
+  }
 });
 
 async function authenticate(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -42,7 +68,8 @@ async function authenticate(req: Request, res: Response, next: NextFunction): Pr
 
   const token = authHeader.slice(7);
   try {
-    await jwtVerify(token, JWKS, { issuer: KEYCLOAK_ISSUER, audience: MCP_AUDIENCE });
+    const { payload } = await jwtVerify(token, JWKS, { issuer: KEYCLOAK_ISSUER, audience: MCP_AUDIENCE });
+    req.jwtPayload = payload;
     next();
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -53,7 +80,7 @@ async function authenticate(req: Request, res: Response, next: NextFunction): Pr
 
 const transports = new Map<string, StreamableHTTPServerTransport>();
 
-function buildMcpServer(): McpServer {
+function buildMcpServer(claims?: JWTPayload): McpServer {
   const server = new McpServer({ name: 'keycloak-poc-mcp', version: '1.0.0' });
 
   server.tool('echo', 'Echoes back the provided message', { message: z.string().describe('Message to echo') }, async ({ message }) => ({
@@ -67,6 +94,14 @@ function buildMcpServer(): McpServer {
   server.tool('get-server-info', 'Returns MCP server info', {}, async () => ({
     content: [{ type: 'text' as const, text: `Server: keycloak-poc-mcp v1.0.0 | Protected by: ${KEYCLOAK_ISSUER}` }],
   }));
+
+  server.tool('get-current-user', 'Returns the name of the currently authenticated user', {}, async () => {
+    const name = (claims as Record<string, unknown> | undefined)?.['name']
+      ?? (claims as Record<string, unknown> | undefined)?.['preferred_username']
+      ?? claims?.sub
+      ?? 'unknown';
+    return { content: [{ type: 'text' as const, text: `Authenticated user: ${name}` }] };
+  });
 
   return server;
 }
@@ -85,7 +120,7 @@ app.post('/mcp', authenticate, async (req: Request, res: Response) => {
     transport.onclose = () => {
       if (transport.sessionId) transports.delete(transport.sessionId);
     };
-    await buildMcpServer().connect(transport);
+    await buildMcpServer(req.jwtPayload).connect(transport);
   }
 
   await transport.handleRequest(req, res, req.body);
