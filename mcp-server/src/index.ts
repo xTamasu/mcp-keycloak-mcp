@@ -23,8 +23,6 @@ app.get('/.well-known/oauth-protected-resource', (_req: Request, res: Response) 
     resource: MCP_SERVER_URL,
     authorization_servers: [KEYCLOAK_ISSUER],
     bearer_methods_supported: ['header'],
-    scopes_supported: ['openid', 'profile', 'email'],
-    resource_documentation: `${MCP_SERVER_URL}/docs`,
   });
 });
 
