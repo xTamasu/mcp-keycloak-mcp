@@ -96,41 +96,39 @@ OpenCode handles the OAuth flow automatically when it encounters a 401. Add this
 
 ## Open WebUI Configuration
 
-### Option 1 — OAuth 2.1 Static (Recommended)
+### Empfohlener Weg — Auth-Typ „OAuth"
 
-Configure once in the Admin panel so all users share the same OAuth client credentials:
+Open WebUI leitet den **OAuth-Token des angemeldeten Systembenutzers** direkt an den MCP-Server weiter. Es ist keine separate Client-Credentials-Konfiguration nötig.
 
-1. Log in to Open WebUI at http://localhost:3001 (create an account on first visit)
-2. Go to **Admin Settings → External Connections → MCP**
-3. Click **Add Connection** and fill in:
+1. In Open WebUI als Admin einloggen (http://localhost:3001)
+2. **Admin Settings → External Connections → MCP**
+3. **Add Connection** und folgendes eintragen:
    - **URL**: `http://mcp-server:3000/mcp`
-   - **Auth Type**: `OAuth 2.1 (Static)`
-   - **OAuth Server URL**: `http://keycloak:8080/realms/mcp-poc`
-   - **Client ID**: `openwebui-client`
-   - **Client Secret**: `openwebui-secret`
-   - **Scope**: `openid profile email`
-4. Click **Save** — Open WebUI fetches the OIDC discovery doc and performs the client credentials / auth-code flow on behalf of users.
+   - **Auth Type**: `OAuth`
+4. **Save** — Open WebUI hängt beim MCP-Aufruf automatisch den Keycloak-Token des eingeloggten Benutzers als `Authorization: Bearer <token>` an.
 
-### Option 2 — Bearer Token Fallback
+> **Voraussetzung:** Open WebUI muss selbst per Keycloak-OIDC eingeloggt sein (d. h. `OPENID_PROVIDER_URL` im Docker Compose ist gesetzt). Dann ist der Benutzer-Token bereits vorhanden und wird direkt weitergereicht — kein zusätzlicher OAuth-Flow nötig.
 
-Use this as a workaround for Open WebUI's known per-user PKCE bugs (see Known Limitations below):
+### Fallback — Bearer Token manuell
+
+Falls der OAuth-Weiterleitungsweg nicht funktioniert:
 
 ```bash
-# Get a token directly from Keycloak using the test user
+# Token direkt von Keycloak holen
 TOKEN=$(curl -s -X POST \
   http://keycloak:8080/realms/mcp-poc/protocol/openid-connect/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "client_id=opencode-client&grant_type=password&username=testuser&password=testpassword&scope=openid" \
   | jq -r .access_token)
 
-# Use the token directly with the MCP server
+# Token direkt gegen den MCP-Server testen
 curl -X POST http://localhost:3000/mcp \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
 ```
 
-In Open WebUI, paste the token as a **Bearer token** in the connection settings instead of using OAuth flow.
+Den Token in Open WebUI als **Bearer token** in den Connection-Einstellungen eintragen.
 
 ## Available MCP Tools
 
@@ -149,7 +147,7 @@ In Open WebUI, paste the token as a **Bearer token** in the connection settings 
 
 ## Known Limitations
 
-- **Open WebUI per-user OAuth (PKCE bug)**: As of early 2026, Open WebUI has active issues with per-user OAuth flows involving PKCE (`code_challenge`/`code_verifier` mismatch across redirects). Use the **Static OAuth** admin configuration (Option 1) or the **Bearer Token fallback** (Option 2) instead.
+- **Open WebUI Auth-Typ „OAuth"**: Setzt voraus, dass Open WebUI selbst per Keycloak-OIDC angebunden ist. Der Token des eingeloggten Benutzers wird dann direkt weitergeleitet. Falls Open WebUI nicht per OIDC betrieben wird, den Bearer-Token-Fallback nutzen.
 - **`sslRequired: none`**: This realm export disables SSL requirements for local development. Never use this in production.
 - **Hardcoded secrets in realm-export.json**: The client secrets in `realm-export.json` are defaults for local PoC use. Rotate them via Keycloak Admin → Clients → Credentials before any shared deployment.
 - **`/etc/hosts` entry required**: `KC_HOSTNAME` is set to `keycloak` (the Docker-internal service name). Inside containers, Docker DNS resolves `keycloak` to the Keycloak container. On the host, `127.0.0.1 keycloak` in `/etc/hosts` makes the same hostname reach port-mapped Keycloak. This is the simplest way to share one URL between browser and containers without platform-specific helpers like `host.docker.internal`.
