@@ -5,8 +5,10 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 
-const KEYCLOAK_ISSUER = process.env.KEYCLOAK_ISSUER ?? 'http://keycloak:8080/realms/mcp-poc';
-const KEYCLOAK_JWKS_URI = `${KEYCLOAK_ISSUER}/protocol/openid-connect/certs`;
+const KEYCLOAK_ISSUER = process.env.KEYCLOAK_ISSUER ?? 'http://localhost:8080/realms/mcp-poc';
+// KEYCLOAK_JWKS_URI can point to the internal Docker hostname for in-network fetching
+// while KEYCLOAK_ISSUER uses the external hostname for token validation and resource metadata.
+const KEYCLOAK_JWKS_URI = process.env.KEYCLOAK_JWKS_URI ?? `${KEYCLOAK_ISSUER}/protocol/openid-connect/certs`;
 const MCP_SERVER_URL = process.env.MCP_SERVER_URL ?? 'http://localhost:3000';
 const MCP_AUDIENCE = process.env.MCP_AUDIENCE ?? 'mcp-server';
 const PORT = parseInt(process.env.PORT ?? '3000', 10);
